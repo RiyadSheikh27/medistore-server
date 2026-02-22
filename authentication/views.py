@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from .models import Users
+from .models import *
 from .serializers import *
 from .otp_utils import get_tokens_for_user
 from .email_utils import send_otp_email
@@ -14,11 +14,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def registration(request):
-    """Step 1: Register user and send OTP"""
+    """Register user and send OTP"""
     serializer = RegistrationSerializer(data=request.data)
 
     if not serializer.is_valid():
@@ -28,7 +27,7 @@ def registration(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     email = serializer.validated_data['email']
-    otp = str(random.randint(1000, 9999))
+    otp = str(random.randint(100000, 999999))
 
     try:
         send_otp_email(
@@ -38,24 +37,19 @@ def registration(request):
             recipient_email=email,
         )
 
-        user, created = Users.objects.get_or_create(
+        """Save to pending table only — no user created yet"""
+        PendingRegistration.objects.update_or_create(
             email=email,
             defaults={
                 'first_name': serializer.validated_data.get('first_name', ''),
                 'last_name': serializer.validated_data.get('last_name', ''),
-                'is_active': False,
+                'password': serializer.validated_data['password'],
+                'phone': serializer.validated_data.get('phone', None),
+                'address': serializer.validated_data.get('address', None),
+                'otp': otp,
+                'otp_expires_at': timezone.now() + timezone.timedelta(minutes=5),
             }
         )
-        if not created:
-            user.first_name = serializer.validated_data.get('first_name', '')
-            user.last_name = serializer.validated_data.get('last_name', '')
-
-        if serializer.validated_data.get('image'):
-            user.image = serializer.validated_data['image']
-
-        user.set_password(serializer.validated_data['password'])
-        user.otp = otp
-        user.save()
 
         print(otp)
 
@@ -73,11 +67,87 @@ def registration(request):
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def resend_otp(request):
+    """Resend OTP for both registration and password reset"""
+    email = request.data.get('email')
+    if not email:
+        return Response({
+            'success': False,
+            'message': 'Email is required.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    otp = str(random.randint(100000, 999999))
+
+    try:
+        """Check registration pending first"""
+        try:
+            pending = PendingRegistration.objects.get(email=email)
+
+            send_otp_email(
+                subject='Email Verification - OTP',
+                template_name='emails/registration_otp.html',
+                context={'otp': otp},
+                recipient_email=email,
+            )
+
+            pending.otp = otp
+            pending.otp_expires_at = timezone.now() + timezone.timedelta(minutes=5)
+            pending.save(update_fields=['otp', 'otp_expires_at'])
+
+            print(otp)
+
+            return Response({
+                'success': True,
+                'message': f'OTP resent to {email}',
+                'email': email
+            }, status=status.HTTP_200_OK)
+
+        except PendingRegistration.DoesNotExist:
+            pass
+
+        """Check password reset"""
+        try:
+            user = Users.objects.get(email=email)
+
+            send_otp_email(
+                subject='Password Reset - OTP',
+                template_name='emails/password_reset_otp.html',
+                context={'otp': otp},
+                recipient_email=email,
+            )
+
+            user.otp = otp
+            user.save(update_fields=['otp', 'otp_expired'])
+
+            print(otp)
+
+            return Response({
+                'success': True,
+                'message': f'OTP resent to {email}',
+                'email': email
+            }, status=status.HTTP_200_OK)
+
+        except Users.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'No account or pending registration found for this email.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        logger.error("Resend OTP error for %s: %s", email, str(e))
+        return Response({
+            'success': False,
+            'message': 'Failed to resend OTP. Please try again.',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_registration_otp(request):
-    """Step 2: Verify OTP for both registration and password reset"""
+    """Verify OTP for both registration and password reset"""
     serializer = VerifyOTPSerializer(data=request.data)
 
     if not serializer.is_valid():
@@ -89,6 +159,57 @@ def verify_registration_otp(request):
     email = serializer.validated_data['email']
     otp = serializer.validated_data['otp']
 
+    """Registration flow """
+    try:
+        pending = PendingRegistration.objects.get(email=email)
+
+        if pending.otp != otp:
+            return Response({
+                'success': False,
+                'message': 'Invalid OTP.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if timezone.now() > pending.otp_expires_at:
+            pending.delete()
+            return Response({
+                'success': False,
+                'message': 'OTP has expired. Please register again.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        """OTP verified — now create the real user"""
+        user = Users.objects.create(
+            email=pending.email,
+            first_name=pending.first_name,
+            last_name=pending.last_name,
+            phone=pending.phone,
+            address=pending.address,
+            is_active=True,
+        )
+        user.set_password(pending.password)
+        user.save()
+
+        pending.delete()
+
+        tokens = get_tokens_for_user(user)
+        return Response({
+            'success': True,
+            'message': 'Registration completed successfully',
+            'user': UserProfileSerializer(user).data,
+            'tokens': tokens
+        }, status=status.HTTP_201_CREATED)
+
+    except PendingRegistration.DoesNotExist:
+        pass  # not a registration — fall through to password reset check
+
+    except Exception as e:
+        logger.error("User creation failed for %s: %s", email, str(e))
+        return Response({
+            'success': False,
+            'message': 'Failed to create user. Please try again.',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    """Password reset flow"""
     try:
         user = Users.objects.get(email=email)
 
@@ -104,25 +225,10 @@ def verify_registration_otp(request):
                 'message': 'OTP has expired. Please request a new one.'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clear OTP
         user.otp = None
         user.otp_expired = None
-
-        # Registration flow — user is inactive
-        if not user.is_active:
-            user.is_active = True
-            user.save(update_fields=['otp', 'otp_expired', 'is_active'])
-
-            tokens = get_tokens_for_user(user)
-            return Response({
-                'success': True,
-                'message': 'Registration completed successfully',
-                'user': UserProfileSerializer(user).data,
-                'tokens': tokens
-            }, status=status.HTTP_201_CREATED)
-
-        # Password reset flow — user is already active
         user.save(update_fields=['otp', 'otp_expired'])
+
         return Response({
             'success': True,
             'message': 'OTP verified successfully. Please set your new password.',
@@ -142,7 +248,6 @@ def verify_registration_otp(request):
             'message': 'OTP verification failed. Please try again.',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -189,7 +294,7 @@ def forgot_password(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     email = serializer.validated_data['email']
-    otp = str(random.randint(1000, 9999))
+    otp = str(random.randint(100000, 999999))
 
     try:
         send_otp_email(
@@ -385,6 +490,7 @@ def user_list(request):
 @api_view(['PUT'])
 @permission_classes([IsAdmin])
 def ChangeUserStatus(request, user_id):
+    """Update user Status"""
     try:
         user = get_object_or_404(Users, id=user_id)
         serializer = UserStatusChangeSerializer(user, data=request.data)

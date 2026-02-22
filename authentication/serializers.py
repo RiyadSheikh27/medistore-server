@@ -86,7 +86,7 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         """Update fields"""
         instance.first_name = validated_data.get('first_name', instance.first_name)
         instance.last_name = validated_data.get('last_name', instance.last_name)
-        instance.address = validated_data.get('adress', instance.phone)
+        instance.address = validated_data.get('address', instance.address)
         instance.phone = validated_data.get('phone', instance.phone)
 
         """Handle image update"""

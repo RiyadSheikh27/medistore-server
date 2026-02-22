@@ -57,3 +57,18 @@ class Users(AbstractUser):
         if self.otp:
             self.otp_expired = timezone.now() + timedelta(minutes=5)
         super().save(*args, **kwargs)
+
+    
+class PendingRegistration(models.Model):
+    email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=255, blank=True)
+    last_name = models.CharField(max_length=255, blank=True)
+    password = models.CharField(max_length=255)
+    phone = models.CharField(max_length=150, blank=True, null=True)
+    address = models.CharField(max_length=150, blank=True, null=True)
+    otp = models.CharField(max_length=6)
+    otp_expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Pending: {self.email}"
