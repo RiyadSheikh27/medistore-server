@@ -16,8 +16,18 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+from products.urls import product_urlpatterns, cart_urlpatterns, order_urlpatterns
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/accounts/', include('authentication.urls')),
-]
+    path("ckeditor5/", include("django_ckeditor_5.urls")),
+
+    path("api/v1/products/", include((product_urlpatterns, "products"))),
+    path("api/v1/cart/",     include((cart_urlpatterns, "cart"))),
+    path("api/v1/orders/",   include((order_urlpatterns, "orders"))),
+
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

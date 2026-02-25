@@ -46,6 +46,7 @@ def registration(request):
                 'password': serializer.validated_data['password'],
                 'phone': serializer.validated_data.get('phone', None),
                 'address': serializer.validated_data.get('address', None),
+                'image': serializer.validated_data.get('image', None),
                 'otp': otp,
                 'otp_expires_at': timezone.now() + timezone.timedelta(minutes=5),
             }
@@ -183,6 +184,7 @@ def verify_registration_otp(request):
             last_name=pending.last_name,
             phone=pending.phone,
             address=pending.address,
+            image=pending.image or None,
             is_active=True,
         )
         user.set_password(pending.password)

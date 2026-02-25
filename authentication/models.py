@@ -65,6 +65,7 @@ class PendingRegistration(models.Model):
     last_name = models.CharField(max_length=255, blank=True)
     password = models.CharField(max_length=255)
     phone = models.CharField(max_length=150, blank=True, null=True)
+    image = models.ImageField(upload_to='users/', blank=True, null=True)
     address = models.CharField(max_length=150, blank=True, null=True)
     otp = models.CharField(max_length=6)
     otp_expires_at = models.DateTimeField()

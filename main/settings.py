@@ -48,6 +48,10 @@ CORS_ALLOW_CREDENTIALS = True
 # Application definition
 
 INSTALLED_APPS = [
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -56,9 +60,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'corsheaders',
+    'django_ckeditor_5',
 
     'authentication',
     'utils',
+    'products',
 ]
 
 MIDDLEWARE = [
@@ -167,9 +173,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -183,3 +190,52 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER') 
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')  
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
+
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:8000')
+
+
+UNFOLD = {
+    "SITE_TITLE": "My Shop Admin",
+    "SITE_HEADER": "My Shop",
+    "SITE_SYMBOL": "shopping_cart",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Products",
+                "icon": "inventory_2",
+                "items": [
+                    {"title": "Categories",  "link": "/admin/products/productcategory/"},
+                    {"title": "Products",    "link": "/admin/products/product/"},
+                ],
+            },
+            {
+                "title": "Orders & Cart",
+                "icon": "shopping_bag",
+                "items": [
+                    {"title": "Orders",  "link": "/admin/products/order/"},
+                    {"title": "Carts",   "link": "/admin/products/cart/"},
+                ],
+            },
+        ],
+    },
+}
+
+CKEDITOR_5_CONFIGS = {
+    "default": {
+        "toolbar": [
+            "heading", "|",
+            "bold", "italic", "underline", "strikethrough", "|",
+            "fontSize", "fontColor", "fontBackgroundColor", "|",
+            "bulletedList", "numberedList", "|",
+            "outdent", "indent", "|",
+            "link", "insertTable", "horizontalLine", "|",
+            "undo", "redo", "|",
+            "sourceEditing",
+        ],
+        "height": "400px",
+    }
+}

@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Users
 from django.utils import timezone
 import os
+from django.conf import settings
 
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, min_length=6)
@@ -76,6 +77,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = ['id', 'first_name', 'last_name', 'email', 'image', 'address', 'phone', 'role', 'created_at']
         read_only_fields = ['id', 'email', 'role', 'created_at']
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.image:
+            data['image'] = f"{settings.BASE_URL}{instance.image.url}"
+        return data
+
 
 class UpdateProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -111,6 +118,12 @@ class UserListSerializer(serializers.ModelSerializer):
         model = Users
         fields = ['id', 'first_name', 'last_name', 'email', 'image', 'role', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'total_users', 'total_active_users', 'total_inactive_users']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.image:
+            data['image'] = f"{settings.BASE_URL}{instance.image.url}"
+        return data
 
 
 class UserStatusChangeSerializer(serializers.ModelSerializer):
